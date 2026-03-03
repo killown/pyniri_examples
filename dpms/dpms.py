@@ -7,6 +7,8 @@ import threading
 from pywayland.client import Display
 from pyniri import NiriSocket
 
+sys.path.insert(0, os.getcwd())
+
 try:
     from niri_protocols.wayland.wl_seat import WlSeat
     from niri_protocols.ext_idle_notify_v1.ext_idle_notifier_v1 import ExtIdleNotifierV1
@@ -14,7 +16,7 @@ except ImportError as e:
     print(f"[ERROR] Protocol import failed: {e}")
     sys.exit(1)
 
-IDLE_TIMEOUT_MS = 60000
+IDLE_TIMEOUT_MS = 6000
 JOYSTICK_DEV = "/dev/input/js0"
 JOYSTICK_DEADZONE = 2000
 
@@ -62,6 +64,26 @@ class NiriIdleDaemon:
         self.notification_obj.dispatcher["idled"] = self._on_idled
         self.notification_obj.dispatcher["resumed"] = self._on_resumed
 
+    def _is_focused_fullscreen(self) -> bool:
+        """Determines if focused window is fullscreen based on layout geometry."""
+        try:
+            windows = self.niri.get_windows()
+            for win in windows:
+                if not win.get("is_focused"):
+                    continue
+
+                layout = win.get("layout", {})
+                offset = layout.get("window_offset_in_tile", [1.0, 1.0])
+
+                # In Niri, a fullscreen window has 0 offset and matches tile size
+                # We check offset specifically as it's the most reliable indicator
+                if offset == [0.0, 0.0]:
+                    return True
+            return False
+        except Exception as e:
+            print(f"[DEBUG] Geometry check failed: {e}")
+            return False
+
     def _joystick_loop(self):
         """Monitors joystick and forces a Niri wake-up to reset the timer."""
         fd = None
@@ -98,6 +120,13 @@ class NiriIdleDaemon:
                 time.sleep(1)
 
     def _on_idled(self, obj):
+        if self._is_focused_fullscreen():
+            print(
+                f"[{time.strftime('%H:%M:%S')}] IDLE: Fullscreen detected (Geometry match). Skipping DPMS.",
+                flush=True,
+            )
+            return
+
         print(f"[{time.strftime('%H:%M:%S')}] IDLE: Powering monitors OFF.", flush=True)
         if self.niri.power_off_monitors():
             self.is_powered_off = True
