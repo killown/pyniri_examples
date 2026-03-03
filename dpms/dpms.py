@@ -7,8 +7,6 @@ import threading
 from pywayland.client import Display
 from pyniri import NiriSocket
 
-sys.path.insert(0, "/home/neo")
-
 try:
     from niri_protocols.wayland.wl_seat import WlSeat
     from niri_protocols.ext_idle_notify_v1.ext_idle_notifier_v1 import ExtIdleNotifierV1
